@@ -58,6 +58,14 @@ audio window
 
 This proved that drone audio could be learned, but it was not robust enough. A clean test score did not mean the detector could survive engines, vehicles, or crowd noise.
 
+Early baseline evidence:
+
+![Baseline confusion chart](graphs/baseline_confusion_chart.png)
+
+The follow-up baseline improved the first model but was still a conventional single-view detector:
+
+![Phase 1b confusion chart](graphs/phase1b_confusion_chart.png)
+
 Lesson:
 
 ```text
@@ -88,6 +96,14 @@ What failed:
 
 - one generalist CNN became conservative,
 - weak drones under real noise were still missed.
+
+Early multi-view evidence:
+
+![Phase 2v2 confusion chart](graphs/phase2v2_confusion_chart.png)
+
+The early SNR curve already showed that noise level was the real problem:
+
+![Phase 2v2 SNR curve](graphs/phase2v2_snr_curve.png)
 
 Lesson:
 
@@ -140,6 +156,26 @@ five-specialist CNNs
 The specialists acted as a sensitive front end. The generalist acted as a confirmation model. Temporal smoothing reduced one-window spikes.
 
 This looked excellent on the early benchmark.
+
+Early hybrid timeline evidence:
+
+![Hybrid timeline drone alone](graphs/hybrid_timeline_drone_alone.png)
+
+The hybrid also looked good when the drone was mixed with tank-like noise:
+
+![Hybrid timeline drone plus tank minus 10 dB](graphs/hybrid_timeline_drone_tank_minus10db.png)
+
+At very low SNR, the timeline started to show how hard the problem could become:
+
+![Hybrid timeline drone plus tank minus 20 dB](graphs/hybrid_timeline_drone_tank_minus20db.png)
+
+The no-drone timelines were the reason this version looked promising at first:
+
+![Hybrid timeline tank alone](graphs/hybrid_timeline_tank_alone.png)
+
+![Hybrid timeline engine alone](graphs/hybrid_timeline_engine_alone.png)
+
+![Hybrid timeline pure noise](graphs/hybrid_timeline_pure_noise.png)
 
 Lesson at the time:
 
@@ -253,6 +289,10 @@ The harmonic fusion model improved some mixed-noise conditions while keeping fal
 Threshold choice became important:
 
 ![Phase 2 threshold tradeoff](graphs/phase2_threshold_tradeoff.png)
+
+The detailed sweep showed how different thresholds affected low-SNR recall and false alarms:
+
+![Phase 2 threshold sweep detail](graphs/phase2_threshold_sweep_detail.png)
 
 Score distributions helped show how the fusion model separated conditions:
 
