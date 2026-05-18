@@ -1,30 +1,33 @@
-# Acoustic Drone Detection in Real-Noise Environments
+# Acoustic Drone Detection
 
-Passive acoustic drone detection research prototype built with Python, PyTorch, DSP, and iterative benchmarking.
+Passive acoustic drone detection prototype built with Python, PyTorch, DSP, and real-noise benchmarking.
 
-The goal was simple to state and hard to solve:
+This repo is cleaned for portfolio review:
 
 ```text
-detect drone audio
-while rejecting engines, vehicles, tanks, crowds, wind, and other hard false alarms
+code/             source code
+results/graphs/   selected benchmark graphs
+README.md         project story and results
 ```
 
-The project evolved from a basic CNN into a multi-component detector:
+No raw datasets, trained model weights, private recordings, or large generated outputs are included.
+
+## Best Current Approach
 
 ```text
-5 specialist CNNs
-+ harmonic DSP features
-+ pretrained pitch / periodicity features
+5-specialist CNN
++ harmonic DSP
++ pretrained pitch estimator
 + learned ML fusion
 ```
 
-## Best Current Result
-
-Current best benchmarked system:
+The system takes a 1-second audio window and decides:
 
 ```text
-5-specialist CNN + harmonic DSP + pretrained pitch estimator + learned ML fusion
+drone / no-drone
 ```
+
+## Benchmark Snapshot
 
 | Metric | Result |
 |---|---:|
@@ -36,197 +39,155 @@ Current best benchmarked system:
 | Drone + FSD50K at -5 dB | 99.20% |
 | False alarm rate on benchmark negatives | 0.00% |
 
-These are benchmark results, not operational deployment claims. The system still needs validation on real FPV drone recordings, real vehicle/tank field audio, and real microphone-array recordings.
+These are benchmark results, not operational deployment claims. The next step is validation on real FPV drone recordings and real field noise.
 
-## Why This Project Is Interesting
+## Why This Was Hard
 
-Most early models looked good until the benchmark became realistic.
-
-The key engineering lesson:
+Early versions looked good against synthetic tank and engine sounds. Then real FSD50K vehicle and engine recordings exposed the problem:
 
 ```text
-synthetic tank/engine noise was not enough
+synthetic noise success did not transfer to real noise
 ```
 
-Early systems rejected synthetic tank and engine sounds, but failed when drone audio was mixed with real vehicle/engine audio from FSD50K. That failure changed the project direction from "make the CNN bigger" to "build a better measurement and fusion system."
+That failure became the main engineering lesson of the project.
+
+![Synthetic-to-real failure](results/graphs/synthetic_downfall_old_hybrid.png)
 
 ## Trial and Error
 
-This project is mostly valuable because of the iteration path. Each version exposed a different weakness.
-
-| Iteration | What was tried | What worked | What failed / lesson |
+| Step | Approach | Result | Lesson |
 |---|---|---|---|
-| Baseline CNN | One CNN on log-mel spectrograms | Proved drone audio was learnable | Not robust against hard negatives |
-| Multi-view generalist CNN | One CNN trained across 5 filtered audio views | Stable and lower false alarms | Less sensitive under heavy noise |
-| Five-specialist CNNs | One CNN per audio view | More sensitive to weak drone cues | One specialist could false alarm |
-| Rule-based hybrid | Specialists for sensitivity + generalist for confirmation | Excellent on original synthetic benchmark | Became too conservative on real mixed noise |
-| Synthetic tank/engine testing | Synthetic hard negatives | Useful for prototyping | Created false confidence |
-| Real-noise generalist | DADS + FSD50K hard negatives and mixtures | Reduced false alarms | Missed too many mixed drone cases |
-| Balanced real-noise model | Better class weights, SNR range, threshold sweep | Better guard model | Still not sensitive enough alone |
-| Harmonic DSP fusion | Add f0/harmonic features to CNN latent | Added interpretable engine/vehicle risk | Gain was real but modest |
-| Real-noise specialists | Retrain 5 specialists on real-noise recipe | Restored sensitivity | Needed a learned guard/fusion layer |
-| Pitch-harmonic ML fusion | Add pretrained pitch features + learned fusion | Best recall/FAR balance | Still needs real FPV validation |
+| 1 | Basic CNN on log-mel spectrograms | Learned drone/no-drone basics | Clean accuracy was not enough |
+| 2 | One multi-view generalist CNN | Lower false alarms | Missed weak drones in noise |
+| 3 | Five specialist CNNs | Higher sensitivity | One specialist could fire falsely |
+| 4 | Rule-based hybrid | Strong on synthetic benchmark | Too conservative on real mixed noise |
+| 5 | Real FSD50K hard negatives | Exposed real false-alarm problem | Synthetic noise was misleading |
+| 6 | Real-noise generalist | Reduced false alarms | Lost mixed-drone recall |
+| 7 | Balanced real-noise training | Better guard model | Still not enough alone |
+| 8 | Harmonic DSP fusion | Added engine/vehicle structure features | Useful, but modest gain |
+| 9 | Five real-noise specialists | Regained sensitivity | Needed better fusion |
+| 10 | Pitch-harmonic learned fusion | Best benchmark balance | Needs real FPV validation |
 
-## Main Failure That Changed the Project
-
-The old hybrid looked strong on synthetic tests, but collapsed on drone audio mixed with real FSD50K vehicle/engine noise.
-
-| System | Mixed drone + real-noise recall |
-|---|---:|
-| Old multi-view generalist CNN | 37.03% |
-| Old five-specialist CNN ensemble | 30.95% |
-| Old hybrid | 9.32% |
-
-![Synthetic-to-real failure](results/phase3_real_noise_specialists/plots/synthetic_downfall_old_hybrid.png)
-
-This was the turning point. After this, the project moved to real hard negatives, real-noise mixed positives, threshold sweeps, harmonic features, and learned fusion.
-
-## System Architecture
+## How The Final System Works
 
 ```text
-1-second audio window
-        |
-        v
-five filtered audio views
+audio window
+   |
+   v
+five filtered views
 raw / HPF-150 / HPF-250 / BPF-200-6000 / BPF-500-6000
-        |
-        v
-five specialist CNNs
-        |
-        v
-specialist probability features
-        |
-        +------ harmonic DSP features
-        |
-        +------ pretrained pitch / periodicity features
-        |
-        v
+   |
+   v
+five specialist CNN probabilities
+   |
+   +--> harmonic DSP features
+   |
+   +--> pretrained pitch / periodicity features
+   |
+   v
 learned ML fusion
-        |
-        v
-drone / no-drone
+   |
+   v
+final drone probability
 ```
 
-## How It Works
+### Five Specialist CNNs
 
-### 1. Five Specialist CNNs
-
-The same 1-second audio window is converted into five views:
+Each CNN sees only one filtered view of the same audio window.
 
 | View | Purpose |
 |---|---|
-| Raw | Keeps the full signal |
-| High-pass 150 Hz | Reduces low-frequency rumble |
-| High-pass 250 Hz | Stronger low-frequency rejection |
-| Band-pass 200-6000 Hz | Main drone-relevant acoustic band |
-| Band-pass 500-6000 Hz | Higher motor/propeller evidence |
+| Raw | Preserve full signal |
+| HPF-150 | Reduce deep rumble |
+| HPF-250 | Stronger low-frequency rejection |
+| BPF-200-6000 | Main drone-relevant band |
+| BPF-500-6000 | Higher motor/propeller evidence |
 
-Each view has its own CNN. This gives the detector multiple chances to find drone evidence under different noise conditions.
+### Harmonic DSP
 
-### 2. Harmonic DSP
-
-Vehicles, engines, tanks, and generators often produce harmonic ladders:
+Vehicle and engine sounds often create harmonic ladders:
 
 ```text
-f0, 2f0, 3f0, 4f0, ...
+f0, 2f0, 3f0, 4f0...
 ```
 
-![Simple harmonic ladder](results/phase2_harmonic_fusion/plots/simple_harmonics_ladder.png)
+![Simple harmonic ladder](results/graphs/simple_harmonics_ladder.png)
 
-The harmonic DSP stage estimates features such as:
+The DSP stage estimates harmonic features such as fundamental frequency, harmonicity, low-band energy, and vehicle-risk score.
 
-- low-frequency fundamental frequency,
-- harmonicity,
-- low-band energy,
-- vehicle-risk score.
+### Pretrained Pitch Estimator
 
-It does not delete audio. It gives the fusion model extra evidence.
+A pretrained pitch/periodicity model adds features such as pitch confidence, pitch stability, and low-pitch ratio.
 
-### 3. Pretrained Pitch Estimator
+### Learned ML Fusion
 
-A pretrained pitch/periodicity model adds another view of stable pitch-like structure.
-
-It contributes features such as:
-
-- pitch confidence,
-- pitch stability,
-- low-pitch ratio,
-- periodic frame ratio.
-
-### 4. Learned ML Fusion
-
-The final fusion model receives:
+The fusion model receives:
 
 - five CNN probabilities,
-- specialist weighted score,
+- weighted specialist score,
 - filtered maximum,
 - vote count,
 - harmonic DSP features,
 - pretrained pitch features.
 
-It learns how to combine the evidence instead of relying only on hand-written rules.
+It learns the final drone probability instead of relying only on hand-written rules.
 
-## Benchmark Graphs
+## Main Graphs
 
 ### Recall vs False Alarm
 
-![Recall vs false alarm](results/phase3_real_noise_specialists/plots/all_iterations_recall_vs_far.png)
+![Recall vs false alarm](results/graphs/all_iterations_recall_vs_far.png)
 
 ### Score Index
 
-![Score index](results/phase3_real_noise_specialists/plots/all_iterations_score_index.png)
+![Score index](results/graphs/all_iterations_score_index.png)
 
 ### Recall Across SNR
 
-![SNR recall curves](results/phase3_real_noise_specialists/plots/all_iterations_snr_recall_curves.png)
+![SNR recall](results/graphs/all_iterations_snr_recall_curves.png)
 
 ### Synthetic vs Real-Noise Progress
 
-![Synthetic vs real progress](results/phase3_real_noise_specialists/plots/synthetic_vs_real_progress.png)
+![Synthetic vs real progress](results/graphs/synthetic_vs_real_progress.png)
 
-## Code Structure
+## Repo Structure
 
 ```text
-src/
-  phase2v5_real_noise/            Real-noise generalist CNN pipeline
-  phase2_harmonic_fusion/         Harmonic DSP + CNN latent fusion
-  phase2b_pitch_guard/            Pretrained pitch + learned fusion guard
-  phase3_real_noise_specialists/  Five-specialist real-noise ensemble
-  phase3_array/                   Passive microphone-array simulation/tools
-  fsd50k_hard_negative_eval/      Real-noise benchmark tools
-  hybrid_option2_option3/         Earlier hybrid experiments
-  harmonic_guard/                 Earlier harmonic guard experiments
-
-docs/
-  acoustic_drone_detection_white_paper_publishable.md
-  acoustic_drone_detection_engineering_white_paper.md
-  cv_project_summary_he.md
+code/
+  src/       main Python/MATLAB source modules
+  scripts/   older training and comparison scripts
+  tools/     helper scripts
 
 results/
-  selected benchmark plots
+  graphs/    selected figures only
+
+requirements.txt
+README.md
 ```
 
-## Documentation
+## Code Map
 
-- [Publishable white paper](docs/acoustic_drone_detection_white_paper_publishable.md)
-- [Engineering white paper](docs/acoustic_drone_detection_engineering_white_paper.md)
-- [How AI helped in this project](AI_USAGE.md)
-- [Data notes](DATA.md)
-- [Model card](MODEL_CARD.md)
-- [Hebrew CV project summary](docs/cv_project_summary_he.md)
+| Path | Purpose |
+|---|---|
+| `code/src/phase2v5_real_noise/` | Real-noise generalist CNN |
+| `code/src/phase2_harmonic_fusion/` | Harmonic DSP + CNN latent fusion |
+| `code/src/phase2b_pitch_guard/` | Pretrained pitch features + learned fusion |
+| `code/src/phase3_real_noise_specialists/` | Five-specialist CNN ensemble |
+| `code/src/phase3_array/` | Passive array / beamforming simulation |
+| `code/src/fsd50k_hard_negative_eval/` | Real-noise benchmark tools |
 
 ## How AI Helped
 
 AI was used as an engineering assistant for:
 
-- brainstorming architecture options,
-- turning ideas into concrete experiments,
-- generating and refactoring Python/PyTorch code,
-- debugging benchmark failures,
-- creating plots and documentation,
-- writing the engineering white paper.
+- brainstorming model architectures,
+- generating and refactoring code,
+- designing benchmark scripts,
+- debugging failed iterations,
+- creating graphs,
+- writing clear project explanations.
 
-The benchmark results came from local experiments, datasets, model checkpoints, and evaluation scripts. AI helped accelerate the engineering process; it was not used as a substitute for measured results.
+The measured results came from local experiments and benchmark scripts. AI helped speed up the engineering process; it did not replace testing.
 
 ## Setup
 
@@ -236,47 +197,27 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-CUDA is recommended for training. Some plotting and inference utilities can run on CPU.
+For module commands, set the package path:
 
-## Example Commands
+```powershell
+$env:PYTHONPATH="code"
+```
 
-Generate approach comparison plots:
+Example:
 
-```bash
+```powershell
 python -m src.phase3_real_noise_specialists.plot_iteration_comparison
 ```
 
-Benchmark the latest specialist/fusion system after local datasets and model paths are configured:
+## Not Included
 
-```bash
-python -m src.phase3_real_noise_specialists.benchmark_phase3_specialists
-```
-
-Run the microphone-array system simulator:
-
-```bash
-python -m src.phase3_array.run_phase3_system_sim_3d
-```
-
-## Data and Model Availability
-
-This repository intentionally does not include:
+The repo intentionally excludes:
 
 - raw DADS audio,
 - raw FSD50K audio,
+- trained model checkpoints,
 - private recordings,
-- large trained model checkpoints,
-- generated feature caches.
+- generated feature caches,
+- full benchmark logs.
 
-See [DATA.md](DATA.md) and [MODEL_CARD.md](MODEL_CARD.md).
-
-## Current Status
-
-Research prototype.
-
-The best benchmark result is promising, but the next required step is validation on:
-
-- real FPV drone audio,
-- real field-recorded vehicle/tank noise,
-- real microphone-array recordings,
-- 48 kHz high-frequency drone audio.
+This keeps the GitHub project readable, lightweight, and suitable for a portfolio.

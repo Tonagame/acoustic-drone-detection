@@ -17,12 +17,12 @@ Thumbs.db
 
 # Large/private data
 /data/**
-!/data/
-!/data/external/
-!/data/external/DATASETS_README.md
-!/data/external/MAD/
-!/data/external/MAD/README.md
-!/data/external/MAD/youtube_audio_download.py
+/docs/**
+/AI_USAGE.md
+/DATA.md
+/MODEL_CARD.md
+/README_phase1.md
+/CODEX_PROMPT_phase2v4_specialist.md
 
 # Generated caches and model weights
 /features/**
@@ -33,28 +33,14 @@ Thumbs.db
 
 # Keep selected portfolio figures
 !/results/
-!/results/phase3_real_noise_specialists/
-!/results/phase3_real_noise_specialists/plots/
-!/results/phase3_real_noise_specialists/plots/all_iterations_recall_vs_far.png
-!/results/phase3_real_noise_specialists/plots/all_iterations_score_index.png
-!/results/phase3_real_noise_specialists/plots/all_iterations_snr_recall_curves.png
-!/results/phase3_real_noise_specialists/plots/synthetic_vs_real_progress.png
-!/results/phase3_real_noise_specialists/plots/synthetic_downfall_old_hybrid.png
-!/results/phase2_harmonic_fusion/
-!/results/phase2_harmonic_fusion/plots/
-!/results/phase2_harmonic_fusion/plots/simple_harmonics_ladder.png
-!/results/phase2_harmonic_fusion/plots/phase2_vs_v5c_positive_recall.png
-!/results/phase2_harmonic_fusion/plots/phase2_vs_v5c_false_alarms.png
-!/results/phase2_harmonic_fusion/plots/phase2_threshold_tradeoff.png
-!/results/phase2_harmonic_fusion/plots/phase2_score_distribution.png
+!/results/README.md
+!/results/graphs/
+!/results/graphs/*.png
+!/results/graphs/README.md
 
 # Keep docs, source, and small metadata
-!/docs/**/*.md
-!/docs/**/*.docx
 docs/~$*.docx
 **/~$*.docx
-!/src/**/*.py
-!/tools/**/*.py
-!/data/external/DATASETS_README.md
-!/data/external/MAD/README.md
-!/data/external/MAD/youtube_audio_download.py
+!/code/**
+**/__pycache__/
+*.py[cod]
