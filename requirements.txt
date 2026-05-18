@@ -1,0 +1,13 @@
+﻿# Python dependencies for the acoustic drone detection research prototype.
+# CUDA-specific PyTorch installation may require selecting the right wheel from pytorch.org.
+
+numpy
+scipy
+pandas
+matplotlib
+soundfile
+torch
+torchaudio
+scikit-learn
+python-docx
+Pillow

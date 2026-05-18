@@ -1,0 +1,10 @@
+* text=auto
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.docx binary
+*.pth binary
+*.pt binary
+*.wav binary
+*.mp3 binary
+*.flac binary
