@@ -42,5 +42,7 @@ Thumbs.db
 docs/~$*.docx
 **/~$*.docx
 !/code/**
+!/trial_and_error/
+!/trial_and_error/**
 **/__pycache__/
 *.py[cod]

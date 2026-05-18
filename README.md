@@ -68,6 +68,10 @@ That failure became the main engineering lesson of the project.
 | 9 | Five real-noise specialists | Regained sensitivity | Needed better fusion |
 | 10 | Pitch-harmonic learned fusion | Best benchmark balance | Needs real FPV validation |
 
+Full story with graphs:
+
+[Trial and Error Story](trial_and_error/README.md)
+
 ## How The Final System Works
 
 ```text
