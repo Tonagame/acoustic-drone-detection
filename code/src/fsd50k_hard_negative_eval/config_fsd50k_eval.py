@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 FSD50K_DIR = ROOT / "data" / "external" / "FSD50K"
 FSD50K_CANDIDATES_CSV = FSD50K_DIR / "fsd50k_vehicle_engine_candidates.csv"

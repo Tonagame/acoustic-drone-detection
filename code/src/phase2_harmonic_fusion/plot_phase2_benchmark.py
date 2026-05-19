@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_RESULTS = ROOT / "results" / "phase2_harmonic_fusion"
 DEFAULT_SUMMARY = DEFAULT_RESULTS / "benchmark_phase2_harmonic_fusion_v1_thr_0p85_backbone_0p6_summary.csv"
 DEFAULT_SWEEP = DEFAULT_RESULTS / "benchmark_phase2_harmonic_fusion_v1_threshold_sweep.csv"

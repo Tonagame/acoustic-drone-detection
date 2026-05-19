@@ -23,6 +23,13 @@ set PYTHONPATH=code
 python -m src.phase3_real_noise_specialists.plot_iteration_comparison
 ```
 
+Raw-only versus five-specialist ablation:
+
+```powershell
+$env:PYTHONPATH="code"
+python -m src.phase3_real_noise_specialists.ablate_raw_vs_five --windows-per-condition 250
+```
+
 On PowerShell:
 
 ```powershell

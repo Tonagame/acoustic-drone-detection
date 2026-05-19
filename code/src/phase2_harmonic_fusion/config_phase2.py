@@ -1,6 +1,6 @@
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 PHASE2V5_BACKBONE_PATH = ROOT / "models" / "phase2v5_real_noise" / "drone_cnn_phase2v5c_real_noise_balanced.pth"
 MODELS_DIR = ROOT / "models" / "phase2_harmonic_fusion"
@@ -28,4 +28,3 @@ HARMONIC_FEATURE_NAMES = [
 def ensure_dirs():
     for path in [MODELS_DIR, RESULTS_DIR, FEATURES_DIR, LOGS_DIR]:
         path.mkdir(parents=True, exist_ok=True)
-

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 DATA_DIR = ROOT / "data"
 DRONE_DIR = DATA_DIR / "raw" / "drone"
@@ -47,4 +47,3 @@ FSD_LABELS = [
 def ensure_dirs():
     for path in [MODELS_DIR, RESULTS_DIR, LATENTS_DIR, LOGS_DIR]:
         path.mkdir(parents=True, exist_ok=True)
-

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 MODELS_DIR = ROOT / "models" / "phase3_real_noise_specialists"
 RESULTS_DIR = ROOT / "results" / "phase3_real_noise_specialists"
@@ -34,4 +34,3 @@ TEMPORAL_SMOOTHING = "2_of_3"
 def ensure_dirs():
     for path in [MODELS_DIR, RESULTS_DIR, CHECKPOINT_DIR, LOGS_DIR]:
         path.mkdir(parents=True, exist_ok=True)
-

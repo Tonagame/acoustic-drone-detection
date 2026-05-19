@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -135,4 +135,3 @@ def build_feature_matrix(
         backbone_phase=ckpt.get("phase", ""),
     )
     return out_path
-

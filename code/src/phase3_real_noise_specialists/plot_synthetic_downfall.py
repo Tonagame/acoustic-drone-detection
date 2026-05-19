@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 OUT_DIR = ROOT / "results" / "phase3_real_noise_specialists" / "plots"
 
 
@@ -71,4 +71,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

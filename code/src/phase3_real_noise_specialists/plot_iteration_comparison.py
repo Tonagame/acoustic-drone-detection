@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 PHASE3_RESULTS = ROOT / "results" / "phase3_real_noise_specialists"
 PHASE2B_RESULTS = ROOT / "results" / "phase2b_pitch_guard"
 OUT_DIR = PHASE3_RESULTS / "plots"

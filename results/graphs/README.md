@@ -10,3 +10,4 @@ Selected benchmark and explanation graphs:
 | `synthetic_downfall_old_hybrid.png` | Shows the synthetic-to-real failure that changed the project |
 | `synthetic_vs_real_progress.png` | Shows progress after switching to real-noise benchmarks |
 | `simple_harmonics_ladder.png` | Simple explanation of harmonic structure |
+| `raw_vs_five_ablation.png` | Raw-only specialist versus five-specialist ablation |

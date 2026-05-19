@@ -154,6 +154,12 @@ It learns the final drone probability instead of relying only on hand-written ru
 
 ![Synthetic vs real progress](results/graphs/synthetic_vs_real_progress.png)
 
+### Raw-Only vs Five-Specialist Ablation
+
+This test compares using only the raw specialist probability against using all five specialist probabilities.
+
+![Raw vs five specialist ablation](results/graphs/raw_vs_five_ablation.png)
+
 ## Repo Structure
 
 ```text

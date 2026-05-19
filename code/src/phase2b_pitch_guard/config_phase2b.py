@@ -1,6 +1,6 @@
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 MODELS_DIR = ROOT / "models" / "phase2b_pitch_guard"
 RESULTS_DIR = ROOT / "results" / "phase2b_pitch_guard"
@@ -46,4 +46,3 @@ FEATURE_NAMES = [
 def ensure_dirs():
     for path in [MODELS_DIR, RESULTS_DIR, FEATURES_DIR, LOGS_DIR]:
         path.mkdir(parents=True, exist_ok=True)
-

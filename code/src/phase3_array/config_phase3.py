@@ -7,7 +7,7 @@ not promote or overwrite any existing detector.
 
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 sample_rate_target = 16000
 speed_of_sound = 343.0

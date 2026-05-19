@@ -6,7 +6,7 @@ models, or promote itself as the primary detector.
 
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 SRC_DIR = ROOT / "src" / "harmonic_guard"
 HYBRID_SRC_DIR = ROOT / "src" / "hybrid_option2_option3"
