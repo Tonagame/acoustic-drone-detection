@@ -24,6 +24,26 @@ class MidFusionHead(nn.Module):
         return self.net(z)
 
 
+class GuardNeckFusionHead(nn.Module):
+    """Classifier over specialist latents plus guard evidence at the neck."""
+
+    def __init__(self, in_dim: int = 324, hidden_dim: int = 192, dropout: float = 0.20, n_classes: int = 2):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.LayerNorm(in_dim),
+            nn.Linear(in_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim // 2, n_classes),
+        )
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        return self.net(z)
+
+
 class FrozenSpecialistMidFusion(nn.Module):
     """Runs each fixed view through its matching frozen specialist encoder."""
 
