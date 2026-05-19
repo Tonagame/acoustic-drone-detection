@@ -36,3 +36,5 @@ Graphs used by the trial-and-error story.
 | `all_iterations_score_index.png` | Score index comparison |
 | `all_iterations_snr_recall_curves.png` | SNR recall comparison |
 | `synthetic_vs_real_progress.png` | Progress from synthetic to real-noise training |
+| `guard_neck_v2_comparison.png` | Current guard-neck fusion comparison |
+| `guard_neck_vs_mid_fusion.png` | Guard-neck v2 versus mid-fusion v1 |
