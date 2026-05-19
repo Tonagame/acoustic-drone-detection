@@ -21,6 +21,7 @@ from src.phase2v5_real_noise.data_phase2v5 import AudioFileWindowPool, FSD50KWin
 from src.phase3_real_noise_specialists.predict_phase3_hybrid import (
     TemporalSmoother,
     fuse_phase3,
+    fuse_phase3_soft_guard,
     load_phase2_guard,
     load_specialist_bundle,
     predict_phase2_guard,
@@ -222,7 +223,8 @@ def false_alarm_by_category(rows):
 
 
 def plot_summary(summary_rows, sweep_rows, out_path: Path):
-    systems = ["mid_fusion", "specialists_only", "phase3_hybrid"]
+    systems = ["mid_fusion", "specialists_only", "phase3_hybrid", "phase3_soft_guard"]
+    labels = ["Mid fusion", "5-specialist rule", "Hard guard", "Soft guard"]
     overall = [r for r in summary_rows if r["condition"] == "overall"]
     recalls = [next((float(r["positive_recall_percent"]) for r in overall if r["system"] == s), 0.0) for s in systems]
     fars = [next((float(r["negative_false_alarm_percent"]) for r in overall if r["system"] == s), 0.0) for s in systems]
@@ -231,9 +233,9 @@ def plot_summary(summary_rows, sweep_rows, out_path: Path):
     x = np.arange(len(systems))
     axes[0].bar(x - 0.18, recalls, width=0.36, label="Recall")
     axes[0].bar(x + 0.18, fars, width=0.36, label="False alarm")
-    axes[0].set_xticks(x, ["Mid fusion", "5-specialist rule", "Hybrid guard"], rotation=15, ha="right")
+    axes[0].set_xticks(x, labels, rotation=15, ha="right")
     axes[0].set_ylabel("Smoothed rate (%)")
-    axes[0].set_title("Mid Fusion vs Existing")
+    axes[0].set_title("Mid Fusion vs Guard Variants")
     axes[0].legend()
     axes[0].grid(axis="y", alpha=0.25)
     axes[1].plot([float(r["threshold"]) for r in sweep_overall], [float(r["positive_recall_percent"]) for r in sweep_overall], marker="o", label="Recall")
@@ -295,7 +297,7 @@ def main():
     conditions.extend((f"drone_plus_fsd_snr_{snr:+d}db", True) for snr in SNR_LEVELS)
     conditions.extend([("fsd_real_noise_alone", False), ("dads_no_drone_alone", False)])
     category_conditions = [(f"fsd_label__{label}", False) for label in FSD_LABELS if label in category_pools]
-    systems = ["mid_fusion", "specialists_only", "phase3_hybrid"]
+    systems = ["mid_fusion", "specialists_only", "phase3_hybrid", "phase3_soft_guard"]
     smoothers = {system: TemporalSmoother(TEMPORAL_SMOOTHING) for system in systems}
     rows = []
     latency_rows = []
@@ -315,11 +317,15 @@ def main():
             hy_t0 = time.perf_counter()
             hy = fuse_phase3(sp, gd)
             hy_ms = sp_ms + gd_ms + ((time.perf_counter() - hy_t0) * 1000.0)
+            soft_t0 = time.perf_counter()
+            soft = fuse_phase3_soft_guard(sp, gd)
+            soft_ms = sp_ms + gd_ms + ((time.perf_counter() - soft_t0) * 1000.0)
             mid_score, mid_ms = timed_call(device, predict_mid, mid_model, preproc, audio, device)
             values = {
                 "mid_fusion": (mid_score >= args.threshold, mid_score, f"mid_threshold_{args.threshold:.2f}", mid_ms),
                 "specialists_only": (sp.candidate, sp.score, "specialist_rule", sp_ms),
                 "phase3_hybrid": (hy.detected, hy.score, hy.reason, hy_ms),
+                "phase3_soft_guard": (soft.detected, soft.score, soft.reason, soft_ms),
             }
             for system, (detected, score, reason, latency_ms) in values.items():
                 smoothed = smoothers[system].update(bool(detected))

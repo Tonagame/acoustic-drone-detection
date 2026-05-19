@@ -183,6 +183,48 @@ def fuse_phase3(specialist: SpecialistPrediction, guard: Phase2GuardPrediction) 
     return Phase3HybridPrediction(detected, score, reason, specialist, guard)
 
 
+def fuse_phase3_soft_guard(specialist: SpecialistPrediction, guard: Phase2GuardPrediction) -> Phase3HybridPrediction:
+    """
+    Softer guard variant for weak mixed positives.
+
+    The original guard can reject low-SNR drones when harmonic/vehicle evidence is
+    strong. This version treats vehicle risk as a score penalty when only one
+    specialist view is hot, while still allowing strong specialist evidence with
+    a weak Phase 2 confirmation.
+    """
+    hot_views = int((specialist.per_view_probs > SPECIALIST_VOTE_THR).sum())
+    sparse = hot_views <= SPARSE_HOT_VIEW_MAX
+    multi_view = hot_views >= SPECIALIST_VOTES_NEED
+    candidate = (specialist.filtered_max > SPECIALIST_FMAX_THR) or (specialist.score > 0.50) or multi_view
+    strong_specialist = specialist.filtered_max >= 0.86 or specialist.score >= 0.86
+    guard_strong = guard.score >= PHASE2_STRONG_THR
+    vehicle_risk = guard.vehicle_risk_score >= VEHICLE_RISK_VETO_THR and sparse and not guard_strong
+
+    detected = False
+    reason = "no_candidate"
+    if candidate and guard.score >= 0.55:
+        detected = True
+        reason = "soft_candidate_confirmed"
+    elif strong_specialist and guard.score >= 0.25:
+        detected = True
+        reason = "soft_strong_specialist_weak_guard"
+    elif guard_strong and hot_views >= 1:
+        detected = True
+        reason = "soft_strong_guard_one_specialist"
+    elif candidate:
+        reason = "soft_candidate_guard_reject"
+
+    score = float(0.65 * specialist.score + 0.35 * guard.score)
+    if vehicle_risk and not multi_view:
+        score = float(score - 0.08 * guard.vehicle_risk_score)
+        if score < 0.50:
+            detected = False
+            reason = "soft_vehicle_penalty_reject"
+        elif detected:
+            reason = f"{reason}_vehicle_penalty"
+    return Phase3HybridPrediction(detected, score, reason, specialist, guard)
+
+
 def predict_phase3_hybrid(detector, audio: np.ndarray) -> Phase3HybridPrediction:
     preproc = detector["preproc"]
     audio = np.asarray(audio, dtype=np.float32)
@@ -192,4 +234,3 @@ def predict_phase3_hybrid(detector, audio: np.ndarray) -> Phase3HybridPrediction
     specialist = predict_specialists(detector["specialists"], preproc, audio)
     guard = predict_phase2_guard(detector["guard"], preproc, audio)
     return fuse_phase3(specialist, guard)
-
