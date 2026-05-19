@@ -5,7 +5,7 @@ import csv
 import random
 import sys
 import time
-from collections import deque
+from collections import defaultdict, deque
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -63,7 +63,18 @@ def build_pools(args, preproc):
     return drone_pool, fsd_pool, nodrone_pool
 
 
-def sample_condition(condition, pools, preproc, rng):
+def build_category_pools(args, preproc):
+    pools = {}
+    per_label = min(args.max_fsd_clips_per_label, args.category_max_clips_per_label)
+    for idx, label in enumerate(FSD_LABELS):
+        try:
+            pools[label] = FSD50KWindowPool(FSD50K_CANDIDATES_CSV, preproc, [label], per_label, args.seed + 1000 + idx)
+        except FileNotFoundError:
+            print(f"Warning: no clips found for FSD label {label}")
+    return pools
+
+
+def sample_condition(condition, pools, preproc, rng, category_pools=None):
     drone_pool, fsd_pool, nodrone_pool = pools
     if condition == "drone_alone":
         return drone_pool.sample_window(rng)
@@ -76,6 +87,11 @@ def sample_condition(condition, pools, preproc, rng):
         return fsd_pool.sample_window(rng)
     if condition == "dads_no_drone_alone":
         return nodrone_pool.sample_window(rng) if nodrone_pool else fsd_pool.sample_window(rng)
+    if condition.startswith("fsd_label__"):
+        label = condition.split("__", 1)[1]
+        if category_pools and label in category_pools:
+            return category_pools[label].sample_window(rng)
+        return fsd_pool.sample_window(rng)
     raise ValueError(condition)
 
 
@@ -104,6 +120,19 @@ def summarize(rows, system, condition, target_positive, detected_key="smoothed_d
         "smoothed_detection_rate_percent": 100.0 * det / max(len(sub), 1),
         "mean_score": float(np.mean([r["score"] for r in sub])) if sub else 0.0,
     }
+
+
+def cuda_sync(device):
+    if getattr(device, "type", "") == "cuda":
+        torch.cuda.synchronize(device)
+
+
+def timed_call(device, fn, *args, **kwargs):
+    cuda_sync(device)
+    t0 = time.perf_counter()
+    out = fn(*args, **kwargs)
+    cuda_sync(device)
+    return out, (time.perf_counter() - t0) * 1000.0
 
 
 @torch.no_grad()
@@ -151,6 +180,47 @@ def threshold_sweep(rows, conditions):
     return sweep
 
 
+def latency_summary(latency_rows):
+    rows = []
+    by_system = defaultdict(list)
+    for row in latency_rows:
+        by_system[row["system"]].append(float(row["latency_ms"]))
+    for system, vals in by_system.items():
+        arr = np.asarray(vals, dtype=np.float32)
+        rows.append({
+            "system": system,
+            "samples": int(arr.size),
+            "mean_ms_per_1s_window": float(arr.mean()) if arr.size else 0.0,
+            "median_ms": float(np.median(arr)) if arr.size else 0.0,
+            "p90_ms": float(np.percentile(arr, 90)) if arr.size else 0.0,
+            "p95_ms": float(np.percentile(arr, 95)) if arr.size else 0.0,
+            "p99_ms": float(np.percentile(arr, 99)) if arr.size else 0.0,
+            "windows_per_second": float(1000.0 / arr.mean()) if arr.size and arr.mean() > 0 else 0.0,
+            "realtime_factor_for_1s_hop": float(1000.0 / arr.mean()) if arr.size and arr.mean() > 0 else 0.0,
+            "realtime_factor_for_0p5s_hop": float(500.0 / arr.mean()) if arr.size and arr.mean() > 0 else 0.0,
+        })
+    return rows
+
+
+def false_alarm_by_category(rows):
+    out = []
+    for system in sorted({r["system"] for r in rows}):
+        neg_conditions = sorted({r["condition"] for r in rows if r["system"] == system and int(r["target_positive"]) == 0})
+        for condition in neg_conditions:
+            sub = [r for r in rows if r["system"] == system and r["condition"] == condition]
+            false_alarms = sum(int(r["smoothed_detected"]) for r in sub)
+            out.append({
+                "system": system,
+                "category": condition.replace("fsd_label__", ""),
+                "windows": len(sub),
+                "false_alarm_count": int(false_alarms),
+                "false_alarm_rate_percent": 100.0 * false_alarms / max(len(sub), 1),
+                "mean_score": float(np.mean([r["score"] for r in sub])) if sub else 0.0,
+                "max_score": float(np.max([r["score"] for r in sub])) if sub else 0.0,
+            })
+    return out
+
+
 def plot_summary(summary_rows, sweep_rows, out_path: Path):
     systems = ["mid_fusion", "specialists_only", "phase3_hybrid"]
     overall = [r for r in summary_rows if r["condition"] == "overall"]
@@ -186,7 +256,10 @@ def parse_args():
     ap.add_argument("--phase2", type=Path, default=PHASE2_GUARD_PATH)
     ap.add_argument("--backbone", type=Path, default=PHASE2_BACKBONE_PATH)
     ap.add_argument("--windows-per-condition", type=int, default=250)
+    ap.add_argument("--category-windows", type=int, default=120)
+    ap.add_argument("--category-max-clips-per-label", type=int, default=160)
     ap.add_argument("--threshold", type=float, default=0.50)
+    ap.add_argument("--no-category-breakdown", action="store_true")
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--seed", type=int, default=6363)
     ap.add_argument("--no-gpu", action="store_true")
@@ -200,6 +273,7 @@ def main():
     args = parse_args()
     if args.quick:
         args.windows_per_condition = min(args.windows_per_condition, 80)
+        args.category_windows = min(args.category_windows, 35)
         args.max_drone_files = min(args.max_drone_files, 1200)
         args.max_nodrone_files = min(args.max_nodrone_files, 800)
         args.max_fsd_clips_per_label = min(args.max_fsd_clips_per_label, 35)
@@ -211,6 +285,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() and not args.no_gpu else "cpu")
     preproc = AudioPreprocessor(16000)
     pools = build_pools(args, preproc)
+    category_pools = {} if args.no_category_breakdown else build_category_pools(args, preproc)
     specialists = load_specialist_bundle(args.specialists, device)
     guard = load_phase2_guard(args.phase2, args.backbone, device)
     mid_model, _ = load_mid_fusion(args.mid_model, specialists, device)
@@ -219,29 +294,41 @@ def main():
     conditions = [("drone_alone", True)]
     conditions.extend((f"drone_plus_fsd_snr_{snr:+d}db", True) for snr in SNR_LEVELS)
     conditions.extend([("fsd_real_noise_alone", False), ("dads_no_drone_alone", False)])
+    category_conditions = [(f"fsd_label__{label}", False) for label in FSD_LABELS if label in category_pools]
     systems = ["mid_fusion", "specialists_only", "phase3_hybrid"]
     smoothers = {system: TemporalSmoother(TEMPORAL_SMOOTHING) for system in systems}
     rows = []
+    latency_rows = []
     print("Phase 3 mid-fusion benchmark")
     print(f"Mid model  : {args.mid_model}")
     print(f"Device     : {device}")
     t0 = time.perf_counter()
-    for condition, target_positive in conditions:
+    eval_conditions = conditions + category_conditions
+    for condition, target_positive in eval_conditions:
         for system in systems:
             smoothers[system] = TemporalSmoother(TEMPORAL_SMOOTHING)
-        for wi in range(args.windows_per_condition):
-            audio = sample_condition(condition, pools, preproc, rng)
-            sp = predict_specialists(specialists, preproc, audio)
-            gd = predict_phase2_guard(guard, preproc, audio)
+        n_windows = args.category_windows if condition.startswith("fsd_label__") else args.windows_per_condition
+        for wi in range(n_windows):
+            audio = sample_condition(condition, pools, preproc, rng, category_pools)
+            sp, sp_ms = timed_call(device, predict_specialists, specialists, preproc, audio)
+            gd, gd_ms = timed_call(device, predict_phase2_guard, guard, preproc, audio)
+            hy_t0 = time.perf_counter()
             hy = fuse_phase3(sp, gd)
-            mid_score = predict_mid(mid_model, preproc, audio, device)
+            hy_ms = sp_ms + gd_ms + ((time.perf_counter() - hy_t0) * 1000.0)
+            mid_score, mid_ms = timed_call(device, predict_mid, mid_model, preproc, audio, device)
             values = {
-                "mid_fusion": (mid_score >= args.threshold, mid_score, f"mid_threshold_{args.threshold:.2f}"),
-                "specialists_only": (sp.candidate, sp.score, "specialist_rule"),
-                "phase3_hybrid": (hy.detected, hy.score, hy.reason),
+                "mid_fusion": (mid_score >= args.threshold, mid_score, f"mid_threshold_{args.threshold:.2f}", mid_ms),
+                "specialists_only": (sp.candidate, sp.score, "specialist_rule", sp_ms),
+                "phase3_hybrid": (hy.detected, hy.score, hy.reason, hy_ms),
             }
-            for system, (detected, score, reason) in values.items():
+            for system, (detected, score, reason, latency_ms) in values.items():
                 smoothed = smoothers[system].update(bool(detected))
+                latency_rows.append({
+                    "system": system,
+                    "condition": condition,
+                    "window_index": wi,
+                    "latency_ms": float(latency_ms),
+                })
                 rows.append({
                     "system": system,
                     "condition": condition,
@@ -251,6 +338,7 @@ def main():
                     "smoothed_detected": int(bool(smoothed)),
                     "score": float(score),
                     "reason": reason,
+                    "latency_ms": float(latency_ms),
                     "mid_score": float(mid_score),
                     "specialist_score": float(sp.score),
                     "specialist_filtered_max": float(sp.filtered_max),
@@ -260,12 +348,14 @@ def main():
                 })
 
     summary = []
-    for condition, target_positive in conditions:
+    for condition, target_positive in eval_conditions:
         for system in systems:
             summary.append(summarize(rows, system, condition, target_positive))
     for system in systems:
         pos = [r for r in rows if r["system"] == system and r["target_positive"] == 1]
         neg = [r for r in rows if r["system"] == system and r["target_positive"] == 0]
+        base_neg = [r for r in neg if not str(r["condition"]).startswith("fsd_label__")]
+        category_neg = [r for r in neg if str(r["condition"]).startswith("fsd_label__")]
         summary.append({
             "system": system,
             "condition": "overall",
@@ -273,18 +363,26 @@ def main():
             "windows": len(pos) + len(neg),
             "positive_recall_percent": 100.0 * sum(int(r["smoothed_detected"]) for r in pos) / max(len(pos), 1),
             "negative_false_alarm_percent": 100.0 * sum(int(r["smoothed_detected"]) for r in neg) / max(len(neg), 1),
+            "base_negative_false_alarm_percent": 100.0 * sum(int(r["smoothed_detected"]) for r in base_neg) / max(len(base_neg), 1),
+            "category_negative_false_alarm_percent": 100.0 * sum(int(r["smoothed_detected"]) for r in category_neg) / max(len(category_neg), 1),
             "mean_score": float(np.mean([r["score"] for r in pos + neg])) if pos or neg else 0.0,
         })
     sweep = threshold_sweep(rows, conditions)
+    lat_summary = latency_summary(latency_rows)
+    fa_rows = false_alarm_by_category(rows)
     tag = args.mid_model.stem.replace("drone_cnn_", "")
     if args.quick and not tag.endswith("_quick"):
         tag += "_quick"
     summary_path = RESULTS_DIR / f"benchmark_{tag}_summary.csv"
     debug_path = RESULTS_DIR / f"benchmark_{tag}_debug.csv"
     sweep_path = RESULTS_DIR / f"benchmark_{tag}_threshold_sweep.csv"
+    latency_path = RESULTS_DIR / f"benchmark_{tag}_latency.csv"
+    false_alarm_path = RESULTS_DIR / f"benchmark_{tag}_false_alarms_by_category.csv"
     write_csv(summary_path, summary)
     write_csv(debug_path, rows)
     write_csv(sweep_path, sweep)
+    write_csv(latency_path, lat_summary)
+    write_csv(false_alarm_path, fa_rows)
     graph_path = RESULTS_DIR / f"benchmark_{tag}.png"
     plot_summary(summary, sweep, graph_path)
     public_graph = Path(__file__).resolve().parents[3] / "results" / "graphs" / "mid_fusion_vs_existing.png"
@@ -294,10 +392,18 @@ def main():
     for row in summary:
         if row["condition"] == "overall":
             print(f"{row['system']:<18} recall={float(row['positive_recall_percent']):6.2f}% FAR={float(row['negative_false_alarm_percent']):6.2f}%")
+    print("\nLatency")
+    for row in lat_summary:
+        print(f"{row['system']:<18} mean={float(row['mean_ms_per_1s_window']):7.2f} ms p95={float(row['p95_ms']):7.2f} ms windows/s={float(row['windows_per_second']):5.2f}")
+    print("\nWorst false-alarm categories")
+    for row in sorted(fa_rows, key=lambda r: (r["system"], -float(r["false_alarm_count"]), -float(r["max_score"])))[:12]:
+        print(f"{row['system']:<18} {row['category']:<28} FA={int(row['false_alarm_count']):3d}/{int(row['windows'])} rate={float(row['false_alarm_rate_percent']):5.2f}% max={float(row['max_score']):.3f}")
     sweep_overall = [r for r in sweep if r["condition"] == "overall"]
     best = max(sweep_overall, key=lambda r: float(r["score_index"]))
     print(f"Best mid threshold by recall - 2*FAR: {float(best['threshold']):.2f} recall={float(best['positive_recall_percent']):.2f}% FAR={float(best['negative_false_alarm_percent']):.2f}%")
     print(f"Saved summary -> {summary_path}")
+    print(f"Saved latency -> {latency_path}")
+    print(f"Saved FA cats -> {false_alarm_path}")
     print(f"Saved graph   -> {graph_path}")
     print(f"Elapsed: {time.perf_counter() - t0:.1f}s")
     return 0
